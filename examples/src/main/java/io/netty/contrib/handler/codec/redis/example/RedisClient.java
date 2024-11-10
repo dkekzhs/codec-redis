@@ -20,8 +20,7 @@ import io.netty.channel.Channel;
 import io.netty.channel.ChannelInitializer;
 import io.netty.channel.ChannelPipeline;
 import io.netty.channel.EventLoopGroup;
-import io.netty.channel.MultithreadEventLoopGroup;
-import io.netty.channel.nio.NioHandler;
+import io.netty.channel.nio.NioEventLoopGroup;
 import io.netty.channel.socket.SocketChannel;
 import io.netty.channel.socket.nio.NioSocketChannel;
 import io.netty.contrib.handler.codec.redis.RedisArrayAggregator;
@@ -41,7 +40,7 @@ public class RedisClient {
     private static final int PORT = Integer.parseInt(System.getProperty("port", "6379"));
 
     public static void main(String[] args) throws Exception {
-        EventLoopGroup group = new MultithreadEventLoopGroup(NioHandler.newFactory());
+        EventLoopGroup group = new NioEventLoopGroup();
         try {
             Bootstrap b = new Bootstrap();
             b.group(group)
@@ -59,7 +58,7 @@ public class RedisClient {
              });
 
             // Start the connection attempt.
-            Channel ch = b.connect(HOST, PORT).get();
+            Channel ch = b.connect(HOST, PORT).sync().channel();
 
             // Read commands from the stdin.
             System.out.println("Enter Redis commands (quit to end)");
@@ -78,7 +77,7 @@ public class RedisClient {
                 // Sends the received line to the server.
                 lastWriteFuture = ch.writeAndFlush(line);
                 lastWriteFuture.addListener(future -> {
-                    if (future.isFailed()) {
+                    if (future.isSuccess()) {
                         System.err.print("write failed: ");
                         future.cause().printStackTrace(System.err);
                     }
