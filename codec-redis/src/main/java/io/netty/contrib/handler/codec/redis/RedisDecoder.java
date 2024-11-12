@@ -21,6 +21,8 @@ import io.netty.util.ByteProcessor;
 import io.netty.util.CharsetUtil;
 import io.netty.util.internal.UnstableApi;
 
+import java.util.List;
+
 /**
  * Decodes the Redis protocol into {@link RedisMessage} objects following
  * <a href="https://redis.io/topics/protocol">RESP (REdis Serialization Protocol)</a>.
@@ -58,6 +60,49 @@ public final class RedisDecoder extends ByteToMessageDecoder {
         this(false);
     }
 
+    @Override
+    protected void decode(ChannelHandlerContext ctx, ByteBuf in, List<Object> list) throws Exception {
+        try {
+            for (;;) {
+                switch (state) {
+                    case DECODE_TYPE:
+                        if (!decodeType(in)) {
+                            return;
+                        }
+                        break;
+                    case DECODE_INLINE:
+                        if (!decodeInline(ctx, in)) {
+                            return;
+                        }
+                        break;
+                    case DECODE_LENGTH:
+                        if (!decodeLength(ctx, in)) {
+                            return;
+                        }
+                        break;
+                    case DECODE_BULK_STRING_EOL:
+                        if (!decodeBulkStringEndOfLine(ctx, in)) {
+                            return;
+                        }
+                        break;
+                    case DECODE_BULK_STRING_CONTENT:
+                        if (!decodeBulkStringContent(ctx, in)) {
+                            return;
+                        }
+                        break;
+                    default:
+                        throw new RedisCodecException("Unknown state: " + state);
+                }
+            }
+        } catch (RedisCodecException e) {
+            resetDecoder();
+            throw e;
+        } catch (Exception e) {
+            resetDecoder();
+            throw new RedisCodecException(e);
+        }
+    }
+
     /**
      * Creates a new instance with default {@code maxInlineMessageLength} and {@code messagePool}.
      * @param decodeInlineCommands if {@code true}, inline commands will be decoded.
@@ -91,48 +136,7 @@ public final class RedisDecoder extends ByteToMessageDecoder {
         this.decodeInlineCommands = decodeInlineCommands;
     }
 
-    @Override
-    protected void decode(ChannelHandlerContext ctx, ByteBuf in) throws Exception {
-        try {
-            for (;;) {
-                switch (state) {
-                case DECODE_TYPE:
-                    if (!decodeType(in)) {
-                        return;
-                    }
-                    break;
-                case DECODE_INLINE:
-                    if (!decodeInline(ctx, in)) {
-                        return;
-                    }
-                    break;
-                case DECODE_LENGTH:
-                    if (!decodeLength(ctx, in)) {
-                        return;
-                    }
-                    break;
-                case DECODE_BULK_STRING_EOL:
-                    if (!decodeBulkStringEndOfLine(ctx, in)) {
-                        return;
-                    }
-                    break;
-                case DECODE_BULK_STRING_CONTENT:
-                    if (!decodeBulkStringContent(ctx, in)) {
-                        return;
-                    }
-                    break;
-                default:
-                    throw new RedisCodecException("Unknown state: " + state);
-                }
-            }
-        } catch (RedisCodecException e) {
-            resetDecoder();
-            throw e;
-        } catch (Exception e) {
-            resetDecoder();
-            throw new RedisCodecException(e);
-        }
-    }
+
 
     private void resetDecoder() {
         state = State.DECODE_TYPE;

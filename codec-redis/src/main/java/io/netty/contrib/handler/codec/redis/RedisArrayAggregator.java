@@ -34,8 +34,29 @@ public final class RedisArrayAggregator extends MessageToMessageDecoder<RedisMes
 
     private final Deque<AggregateState> depths = new ArrayDeque<>(4);
 
+
+
+    private RedisMessage decodeRedisArrayHeader(ArrayHeaderRedisMessage header) {
+        if (header.isNull()) {
+            return ArrayRedisMessage.NULL_INSTANCE;
+        } else if (header.length() == 0L) {
+            return ArrayRedisMessage.EMPTY_INSTANCE;
+        } else if (header.length() > 0L) {
+            // Currently, this codec doesn't support `long` length for arrays because Java's List.size() is int.
+            if (header.length() > Integer.MAX_VALUE) {
+                throw new CodecException("this codec doesn't support longer length than " + Integer.MAX_VALUE);
+            }
+
+            // start aggregating array
+            depths.push(new AggregateState((int) header.length()));
+            return null;
+        } else {
+            throw new CodecException("bad length: " + header.length());
+        }
+    }
+
     @Override
-    protected void decode(ChannelHandlerContext ctx, RedisMessage msg) throws Exception {
+    protected void decode(ChannelHandlerContext ctx, RedisMessage msg, List<Object> list) throws Exception {
         if (msg instanceof ArrayHeaderRedisMessage) {
             msg = decodeRedisArrayHeader((ArrayHeaderRedisMessage) msg);
             if (msg == null) {
@@ -60,25 +81,6 @@ public final class RedisArrayAggregator extends MessageToMessageDecoder<RedisMes
         }
 
         ctx.fireChannelRead(msg);
-    }
-
-    private RedisMessage decodeRedisArrayHeader(ArrayHeaderRedisMessage header) {
-        if (header.isNull()) {
-            return ArrayRedisMessage.NULL_INSTANCE;
-        } else if (header.length() == 0L) {
-            return ArrayRedisMessage.EMPTY_INSTANCE;
-        } else if (header.length() > 0L) {
-            // Currently, this codec doesn't support `long` length for arrays because Java's List.size() is int.
-            if (header.length() > Integer.MAX_VALUE) {
-                throw new CodecException("this codec doesn't support longer length than " + Integer.MAX_VALUE);
-            }
-
-            // start aggregating array
-            depths.push(new AggregateState((int) header.length()));
-            return null;
-        } else {
-            throw new CodecException("bad length: " + header.length());
-        }
     }
 
     private static final class AggregateState {
